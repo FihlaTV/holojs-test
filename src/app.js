@@ -2,7 +2,11 @@
 import { HolographicEffect, HolographicCamera } from 'three-holographic';
 
 // three.js imports
-import { WebGLRenderer, Scene, PerspectiveCamera, Raycaster, Clock, Color, Vector3, TextureLoader, MeshStandardMaterial, MeshLambertMaterial, MeshBasicMaterial, MeshNormalMaterial, MeshPhongMaterial, MeshPhysicalMaterial, ShaderMaterial, RawShaderMaterial, VertexColors, DataTexture, AmbientLight, DirectionalLight, PointLight, BoxBufferGeometry, SphereBufferGeometry, ConeBufferGeometry, TetrahedronBufferGeometry, TorusKnotBufferGeometry, RingBufferGeometry, DodecahedronGeometry, CylinderGeometry, RGBFormat, Mesh, BufferAttribute } from 'three';
+import 'three/examples/js/controls/OrbitControls.js' // attach plugins
+import { WebGLRenderer, Scene, PerspectiveCamera, Raycaster, Clock, Color, Vector3, OrbitControls, TextureLoader, MeshStandardMaterial, MeshLambertMaterial, MeshBasicMaterial, MeshNormalMaterial, MeshPhongMaterial, MeshPhysicalMaterial, ShaderMaterial, RawShaderMaterial, VertexColors, DataTexture, AmbientLight, DirectionalLight, PointLight, BoxBufferGeometry, SphereBufferGeometry, ConeBufferGeometry, TetrahedronBufferGeometry, TorusKnotBufferGeometry, RingBufferGeometry, DodecahedronGeometry, CylinderGeometry, RGBFormat, Mesh, BufferAttribute } from 'three';
+
+// spatial map
+import SpatialMap from './spatial-map.js';
 
 // shaders/textures
 import texture from '../res/texture.png';
@@ -12,21 +16,31 @@ import rawVertShader from './shaders/vert-raw.vert';
 import rawFragShader from './shaders/frag-raw.frag';
 
 // create canvas
-let canvas = document.createElement(window.experimentalHolographic ? 'canvas3D' : 'canvas');
-if (!window.experimentalHolographic) {
+let canvas = document.createElement(window.getViewMatrix ? 'canvas3D' : 'canvas');
+if (!window.getViewMatrix) {
     document.body.appendChild(canvas);
     document.body.style.margin = document.body.style.padding = 0;
     canvas.style.width = canvas.style.height = "100%";
+    let holoLink = document.getElementById('holo-link');
+    console.log(holoLink.href);
+    holoLink.setAttribute('href', `holojs:${holoLink.href}`);
 }
 
 // basics
 let renderer = new WebGLRenderer({ canvas: canvas, antialias: true });
 let holoEffect = new HolographicEffect(renderer);
 let scene = new Scene();
-let camera = window.experimentalHolographic ? new HolographicCamera() : new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
+let camera = window.experimentalHolographic === true ? new HolographicCamera() : new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
 let raycaster = new Raycaster();
 let clock = new Clock();
 let loader = new TextureLoader();
+let controls;
+
+// spatial
+let spatialMap = new SpatialMap();
+let lastLocation;
+let lastPress = 0;
+let mappingOptions = { scanExtentMeters: { x: 5, y: 3, z: 5 }, trianglesPerCubicMeter: 100 };
 
 // lighting
 let ambientLight = new AmbientLight(0xFFFFFF, 0.5);
@@ -38,7 +52,7 @@ let cube = new Mesh(new BoxBufferGeometry(0.2, 0.2, 0.2), new MeshLambertMateria
 let sphere = new Mesh(new SphereBufferGeometry(0.1, 10, 10), new MeshPhongMaterial({ color: 0xff0000, shininess: 200 }));
 let cone = new Mesh(new ConeBufferGeometry(0.1, 0.2, 10, 10), new MeshNormalMaterial());
 let torus = new Mesh(new TorusKnotBufferGeometry(0.2, 0.02, 50, 50), new MeshPhysicalMaterial({ color: 0x00ff00, roughness: 0.5, metalness: 1.0 }));
-let cursor = new Mesh(new RingBufferGeometry(0.001, 0.003, 20, 20), new MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, depthTest: false }));
+let cursor = new Mesh(new RingBufferGeometry(0.005, 0.015, 20, 20), new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthTest: false }));
 let dodecahedron = new Mesh(new DodecahedronGeometry(0.05), new ShaderMaterial({ vertexShader: basicVertShader, fragmentShader: basicFragShader, uniforms: { color: { value: new Color(0x00ffff) } } }));
 let cylinder = new Mesh(new CylinderGeometry(0.05, 0.05, 0.1, 20), new RawShaderMaterial({ vertexShader: rawVertShader, fragmentShader: rawFragShader, uniforms: { color: { value: new Color(0x0000ff) } } }));
 let tetrahedron = new Mesh(new TetrahedronBufferGeometry(0.15), new MeshStandardMaterial({ color: 0xffff00 }));
@@ -55,10 +69,23 @@ torus.scale.set(1.5, 1.5, 1.5);
 cylinder.position.set(-0.2, 0.3, -1.2);
 dodecahedron.position.set(0.2, 0.3, -1.2);
 tetrahedron.position.set(0, 0, 3.5);
+spatialMap.visible = false;
 
 // scene setup
+renderer.enabled = window.experimentalHolographic === true;
 camera.add(cursor);
-scene.add(ambientLight, directionalLight, pointLight, cube, sphere, cone, torus, cylinder, dodecahedron, tetrahedron, camera);
+scene.add(ambientLight, directionalLight, pointLight, cube, sphere, cone, cylinder, dodecahedron, tetrahedron, spatialMap, camera);
+if (window.experimentalHolographic !== true) {
+    camera.position.set(0, 0, 0.0001);
+    controls = new OrbitControls(camera, canvas);
+}
+
+// listen for spatial input
+canvas.addEventListener("sourcepress", (e) => onSpatialSourcePress(e));
+canvas.addEventListener("sourcedetected", (e) => onSpatialSourceDetected(e));
+canvas.addEventListener("sourceupdate", (e) => onSpatialSourceUpdate(e));
+canvas.addEventListener("sourcerelease", (e) => onSpatialSourceDetected(e));
+canvas.addEventListener("sourcelost", (e) => onSpatialSourceLost(e));
 
 // load textures
 loader.load(texture, tex => { cube.material.map = tex; start(); }, x => x, err => start());
@@ -80,17 +107,11 @@ function update (delta, elapsed) {
     raycaster.ray.direction.set(0, 0, -1).transformDirection(camera.matrixWorld);
     let intersects = raycaster.intersectObjects(scene.children);
     if (intersects.length > 0) {
-        cursor.material.color.set(0xFFFF00);
-        cursor.material.opacity = 0.8;
-        cursor.scale.set(5, 5, 5);
         cursor.position.setZ(-(intersects[0].distance - 0.01));
         let direction = intersects[0].face.normal.clone().transformDirection(intersects[0].object.matrixWorld);
         cursor.lookAt(direction);
     }
     else {
-        cursor.material.color.set(0xFFFFFF);
-        cursor.material.opacity = 0.5;
-        cursor.scale.set(5, 5, 5);
         cursor.position.setZ(-2);
         cursor.lookAt(new Vector3(0, 0, 1));
     }
@@ -100,4 +121,45 @@ function update (delta, elapsed) {
 
 function start () {
     update(clock.getDelta(), clock.getElapsedTime());
+}
+
+function onSpatialSourceLost (spatialInputEvent) {
+    cursor.material.color.set(0xFFFFFF);
+    cursor.material.opacity = 0.5;
+}
+
+function onSpatialSourceDetected (spatialInputEvent) {
+    cursor.material.color.set(0xFFFF00);
+    cursor.material.opacity = 0.8;
+}
+
+function onSpatialSourcePress (spatialInputEvent) {
+    cursor.material.color.set(0x00FF00);
+    cursor.material.opacity = 0.8;
+
+    let timestamp = performance.now();
+    if (timestamp - lastPress < 300) {
+        spatialMap.visible = !spatialMap.visible;
+        if (spatialMap.visible) window.requestSpatialMappingData(onSpatialMapData, mappingOptions);
+        else window.removeEventListener('spatialmapping', onSpatialMapData); // requestSpatialMappingData sets this internally
+    }
+    lastPress = timestamp;
+}
+
+function onSpatialMapData (spatialMapData) {
+    spatialMap.setMeshData(spatialMapData);
+}
+
+function onSpatialSourceUpdate (spatialInputEvent) {
+    if (spatialInputEvent.isPressed && lastLocation != null) {
+        let delta = new Vector3(spatialInputEvent.location.x - lastLocation.x, spatialInputEvent.location.y - lastLocation.y, spatialInputEvent.location.z - lastLocation.z);
+        delta.multiplyScalar(2.0);
+        cube.position.add(delta);
+    }
+    if (spatialInputEvent.isPressed === true) {
+        lastLocation = spatialInputEvent.location;
+    }
+    else {
+        lastLocation = null;
+    }
 }

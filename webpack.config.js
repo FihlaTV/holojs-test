@@ -21,11 +21,26 @@ module.exports = {
             {
                 test: /\.(vert|frag)$/,
                 loader: 'raw-loader'
+            },
+            {
+                test: /\.js$/,
+                include: [/three[\\|\/]examples/],
+                use: [{
+                    loader: 'imports-loader',
+                    query: {
+                        THREE: 'three'
+                    }
+                }]
             }
         ]
     },
     output: {
         path: __dirname + '/build',
         filename: 'holo.js'
-    }
+    },
+    devServer: {
+        contentBase: "build",
+        compress: true
+    },
+    devtool: 'source-map'
 }
