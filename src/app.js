@@ -1,5 +1,5 @@
 // holographic imports
-import { HolographicEffect, HolographicCamera } from 'three-holographic';
+import { HolographicCamera } from 'three-holographic';
 
 // three.js imports
 import 'three/examples/js/controls/OrbitControls.js' // attach plugins
@@ -21,14 +21,13 @@ if (!window.getViewMatrix) {
     document.body.appendChild(canvas);
     document.body.style.margin = document.body.style.padding = 0;
     canvas.style.width = canvas.style.height = "100%";
-    let holoLink = document.getElementById('holo-link');
-    console.log(holoLink.href);
-    holoLink.setAttribute('href', `holojs:${holoLink.href}`);
+    let webarLink = document.getElementById('webar-link');
+    console.log(webarLink.href);
+    webarLink.setAttribute('href', `web-ar:${webarLink.href}`);
 }
 
 // basics
 let renderer = new WebGLRenderer({ canvas: canvas, antialias: true });
-let holoEffect = new HolographicEffect(renderer);
 let scene = new Scene();
 let camera = window.experimentalHolographic === true ? new HolographicCamera() : new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
 let raycaster = new Raycaster();
@@ -72,7 +71,6 @@ tetrahedron.position.set(0, 0, 3.5);
 spatialMap.visible = false;
 
 // scene setup
-renderer.enabled = window.experimentalHolographic === true;
 camera.add(cursor);
 scene.add(ambientLight, directionalLight, pointLight, cube, sphere, cone, cylinder, dodecahedron, tetrahedron, spatialMap, camera);
 if (window.experimentalHolographic !== true) {
@@ -116,7 +114,7 @@ function update (delta, elapsed) {
         cursor.lookAt(new Vector3(0, 0, 1));
     }
 
-    holoEffect.render(scene, camera);
+    renderer.render(scene, camera);
 }
 
 function start () {
