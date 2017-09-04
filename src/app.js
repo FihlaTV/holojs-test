@@ -22,7 +22,6 @@ if (!window.getViewMatrix) {
     document.body.style.margin = document.body.style.padding = 0;
     canvas.style.width = canvas.style.height = "100%";
     let webarLink = document.getElementById('webar-link');
-    console.log(webarLink.href);
     webarLink.setAttribute('href', `web-ar:${webarLink.href}`);
 }
 
@@ -90,6 +89,8 @@ loader.load(texture, tex => { cube.material.map = tex; start(); }, x => x, err =
 
 function update (delta, elapsed) {
     window.requestAnimationFrame(() => update(clock.getDelta(), clock.getElapsedTime()));
+
+    if (camera.update) camera.update();
 
     // animate moving objects
     pointLight.position.set(0 + 2.0 * Math.cos(elapsed * 0.5), 0, -1.5 + 2.0 * Math.sin(elapsed * 0.5));

@@ -1,9 +1,11 @@
+var ModuleConcatenationPlugin = require('webpack').optimize.ModuleConcatenationPlugin;
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var GenerateJSONPlugin = require('generate-json-webpack-plugin');
 
 module.exports = {
     entry: './src/app.js',
     plugins: [
+        new ModuleConcatenationPlugin(),
         new HtmlWebpackPlugin({ template: './src/index.html' }),
         new GenerateJSONPlugin('index.json', {
             scripts: ['holo.js']
@@ -39,6 +41,8 @@ module.exports = {
         filename: 'holo.js'
     },
     devServer: {
+        inline: false,
+        host: "0.0.0.0",
         contentBase: "build",
         compress: true
     },
